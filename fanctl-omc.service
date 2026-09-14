@@ -1,0 +1,11 @@
+[Unit]
+Description=NUC X15 fan2 (GPU) controller via EC 0x60
+After=multi-user.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/fanctl-omc.sh
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

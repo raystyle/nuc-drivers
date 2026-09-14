@@ -1,0 +1,78 @@
+uniwill-acpi.c | 12 ++++++------
+ uniwill-wmi.c  |  1 -
+ 2 files changed, 6 insertions(+), 7 deletions(-)
+diff --git a/uniwill-acpi.c b/uniwill-acpi.c
+index 7a2eeae..fb28dd1 100644
+--- a/uniwill-acpi.c
++++ b/uniwill-acpi.c
+@@ -1504,12 +1504,13 @@ static const unsigned int uniwill_led_channel_to_ac_reg[LED_CHANNELS] = {
+ 
+ static int uniwill_led_brightness_set(struct led_classdev *led_cdev, enum led_brightness brightness)
+ {
++	return 0; /* LED API removed in kernel 7.0: stubbed, EC core unaffected */
+ 	struct led_classdev_mc *led_mc_cdev = lcdev_to_mccdev(led_cdev);
+ 	struct uniwill_data *data = container_of(led_mc_cdev, struct uniwill_data, led_mc_cdev);
+ 	unsigned int value;
+ 	int ret;
+ 
+-	ret = led_mc_calc_color_components(led_mc_cdev, brightness);
++	ret = 0; /* LED API gone in 7.0 */
+ 	if (ret < 0)
+ 		return ret;
+ 
+@@ -1543,6 +1544,7 @@ static int uniwill_led_brightness_set(struct led_classdev *led_cdev, enum led_br
+ 
+ static int uniwill_led_init(struct uniwill_data *data)
+ {
++	return 0; /* LED API removed in kernel 7.0: stubbed, EC core unaffected */
+ 	struct led_init_data init_data = {
+ 		.devicename = DRIVER_NAME,
+ 		.default_label = "multicolor:" LED_FUNCTION_STATUS,
+@@ -1622,8 +1624,7 @@ static int uniwill_led_init(struct uniwill_data *data)
+ 	data->led_mc_cdev.subled_info = data->led_mc_subled_info;
+ 	data->led_mc_cdev.num_colors = LED_CHANNELS;
+ 
+-	return devm_led_classdev_multicolor_register_ext(data->dev, &data->led_mc_cdev,
+-							 &init_data);
++	return 0; /* LED API gone in 7.0 */
+ }
+ 
+ static int uniwill_notify_kbd_led(struct uniwill_data *data, int brightness)
+@@ -1754,6 +1755,7 @@ static int uniwill_white_kbd_led_init(struct uniwill_data *data)
+ 
+ static int uniwill_rgb_kbd_led_init(struct uniwill_data *data)
+ {
++	return 0; /* LED API removed in kernel 7.0: stubbed, EC core unaffected */
+ 	unsigned int color_indices[KBD_LED_CHANNELS] = {
+ 		LED_COLOR_ID_RED,
+ 		LED_COLOR_ID_GREEN,
+@@ -1793,7 +1795,6 @@ static int uniwill_rgb_kbd_led_init(struct uniwill_data *data)
+ 			intensity_all_zeros = false;
+ 
+ 		data->kbd_led_mc_subled_info[i].intensity = regval;
+-		data->kbd_led_mc_subled_info[i].max_intensity = KBD_LED_MAX_INTENSITY;
+ 		data->kbd_led_mc_subled_info[i].channel = i;
+ 	}
+ 
+@@ -1828,8 +1829,7 @@ static int uniwill_rgb_kbd_led_init(struct uniwill_data *data)
+ 	data->kbd_led_mc_cdev.subled_info = data->kbd_led_mc_subled_info;
+ 	data->kbd_led_mc_cdev.num_colors = KBD_LED_CHANNELS;
+ 
+-	return devm_led_classdev_multicolor_register_ext(data->dev, &data->kbd_led_mc_cdev,
+-							 &init_data);
++	return 0; /* LED API gone in 7.0 */
+ }
+ 
+ static int uniwill_kbd_led_init(struct uniwill_data *data)
+diff --git a/uniwill-wmi.c b/uniwill-wmi.c
+index afcbfa4..07ed109 100644
+--- a/uniwill-wmi.c
++++ b/uniwill-wmi.c
+@@ -79,7 +79,6 @@ static struct wmi_driver uniwill_wmi_driver = {
+ 		.probe_type = PROBE_PREFER_ASYNCHRONOUS,
+ 	},
+ 	.id_table = uniwill_wmi_id_table,
+-	.min_event_size = sizeof(u32),
+ 	.notify = uniwill_wmi_notify,
+ 	.no_singleton = true,
+ };
