@@ -1,7 +1,8 @@
 #!/bin/bash
-# fanctl-omc v2: NUC X15 (LAPKC71F) auto thermal fan controller (NUCtool 定位)
+# fanctl-omc v2.1: NUC X15 (LAPKC71F) auto thermal fan controller (NUCtool 定位)
 # CPU 扇(fan1)恒 EC 自治;本服务控 GPU/Secondary 扇(fan2),EC 0x60 脉冲写入
 # 曲线按 CPU 与 GPU 温度较高者驱动;阈值与目标可环境变量覆盖
+# 状态文件 /run/fanctl-omc.state 供 fantool 顶栏扩展消费
 HW=$(for d in /sys/class/hwmon/hwmon*; do [ "$(cat $d/name 2>/dev/null)" = uniwill ] && echo $d && break; done)
 [ -z "$HW" ] && { echo "fanctl-omc: no uniwill hwmon" >&2; exit 1; }
 w60() { printf "\\x$1" | dd of=/dev/ec bs=1 seek=96 conv=notrunc 2>/dev/null; }
@@ -20,6 +21,8 @@ while :; do
   else tgt=$R0; fi
   if [ "$tgt" -ne "$cur" ]; then cur=$tgt; echo "$(date '+%F %T') T=${t}C(cpu=$c gpu=$g) fan2-target=$cur"; fi
   r=$(cat $HW/fan2_input 2>/dev/null || echo 0)
+  f1=$(cat $HW/fan1_input 2>/dev/null || echo 0)
+  printf "cpu=%s gpu=%s fan1=%s fan2=%s target=%s %s\n" "$c" "$g" "$f1" "$r" "$cur" "$(date '+%F %T')" > /run/fanctl-omc.state
   if [ "$cur" -gt 0 ]; then
     if   [ "$r" -lt $((cur-100)) ]; then for i in 1 2 3 4 5; do w60 10; sleep 0.7; done
     elif [ "$r" -gt $((cur+100)) ]; then w60 07; sleep 5

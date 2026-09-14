@@ -1,0 +1,7 @@
+{
+  "name": "NUC Fantool Status",
+  "description": "Thermal and fan status for nuc-fantool (uniwill hwmon + fanctl-omc service)",
+  "uuid": "fantool@nuc-fantool",
+  "shell-version": ["45", "46", "47", "48", "49", "50"],
+  "url": "https://github.com/raystyle/nuc-fantool"
+}

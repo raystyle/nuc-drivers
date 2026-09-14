@@ -48,7 +48,11 @@ sudo systemctl edit fanctl-omc
 sudo systemctl restart fanctl-omc
 ```
 
-状态栏 UI(可选):GNOME Extension Manager 装 Vitals 扩展,顶栏直读双风扇 RPM 与 CPU/GPU 温度。
+状态栏 UI(内置扩展):顶栏右侧常显「最高温°C fan1·fan2→目标」(如 `48°C 1350·0→0`),数据源为本服务状态文件加 uniwill hwmon,两秒刷新。装后**注销重登一次**激活(Wayland 下 Shell 不热载新扩展):
+
+```bash
+gnome-extensions enable fantool@nuc-fantool   # 重登后执行,或经 install.sh 已自动
+```
 
 ## 可选:uniwill 树外驱动(EC 杂项)
 
