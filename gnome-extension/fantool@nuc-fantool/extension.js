@@ -1,34 +1,12 @@
 // fantool@nuc-fantool: NUC X15 thermal/fan status indicator for GNOME Shell 45+
-// Reads uniwill hwmon (temps + fan RPM) and /run/fanctl-omc.state (service target).
+// Reads /run/fanctl-omc.state only (cpu/gpu/fan1/fan2/target, 由 fanctl-omc v2.2 每 2-5 秒写入;
+// v2.2 起 uniwill hwmon 已不存在,数据源: coretemp + nvidia-smi + /dev/ec,见 fanctl-omc.sh 头注).
 import St from 'gi://St';
 import GLib from 'gi://GLib';
 import Clutter from 'gi://Clutter';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js';
-
-function hwmonUniwill() {
-    try {
-        const dir = GLib.Dir.open('/sys/class/hwmon', 0);
-        let name;
-        while ((name = dir.read_name()) !== null) {
-            const base = `/sys/class/hwmon/${name}`;
-            try {
-                const [ok, c] = GLib.file_get_contents(`${base}/name`);
-                if (ok && String(c).trim() === 'uniwill') return base;
-            } catch (e) { continue; }
-        }
-    } catch (e) { /* no hwmon root */ }
-    return null;
-}
-
-function readInt(path) {
-    try {
-        const [ok, c] = GLib.file_get_contents(path);
-        if (ok) return parseInt(String(c).trim(), 10);
-    } catch (e) { /* file gone */ }
-    return null;
-}
 
 function readState() {
     try {
@@ -71,19 +49,13 @@ export default class FantoolStatusExtension extends Extension {
     }
 
     _tick() {
-        const base = hwmonUniwill();
-        if (!base) {
-            this._label.set_text('fan: no hwmon');
+        const s = readState();
+        if (!s || s.cpu === undefined) {
+            this._label.set_text('fan: no state');
             return;
         }
-        const cpu = readInt(`${base}/temp1_input`);
-        const gpu = readInt(`${base}/temp2_input`);
-        const fan1 = readInt(`${base}/fan1_input`);
-        const fan2 = readInt(`${base}/fan2_input`);
-        const s = readState();
-        const t = Math.max(cpu ?? 0, gpu ?? 0);
-        const celsius = Number.isFinite(t) ? Math.round(t / 100) / 10 : '?';
-        const tgt = s && s.target !== undefined ? `→${s.target}` : '';
-        this._label.set_text(`${celsius}°C ${fan1 ?? '?'}·${fan2 ?? '?'}${tgt}`);
+        const t = Math.max(parseInt(s.cpu, 10) || 0, parseInt(s.gpu, 10) || 0);
+        const tgt = s.target !== undefined ? `→${s.target}` : '';
+        this._label.set_text(`${t}°C ${s.fan1 ?? '?'}·${s.fan2 ?? '?'}${tgt}`);
     }
 }
