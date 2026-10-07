@@ -104,7 +104,12 @@ EC 0x0751 档位寄存器写入被吞、tuxedo_io ioctl 空转、DPTF/platform_p
 | --- | --- | --- | --- |
 | battery-saver | 80W(DB 关,ctrl 0x05) | 28/45W | balance_power |
 | balanced | 100W + DB25(动态至 125) | 45/65W(出厂) | balance_performance |
-| performance | 125W + DB25(顶 145) | 50/65W | performance |
+| performance | 125W 硬顶(DB 关) | 30/45W | performance |
+
+> 2026-10-07 压测断电教训:GPU 145W(DB)+CPU PL1 50W 合计约 240W 超适配器(约 180W 砖)
+> 致 EC 硬切(断前 CPU 仅 85C/GPU 50C、零 OS 告警、journal 硬止,验尸为电源过载非热跳闸)。
+> performance 档已重校:GPU 125W 硬顶 + CPU PL1 30W,总包对齐 180W 圈;双满形态禁用。
+> 压测须分阶段(CPU-only → GPU-only → 合成),禁一步双满。
 
 用法:`sudo perfmode`(看现态)| `sudo perfmode performance|balanced|battery-saver`
 (别名 perf/bal/save 与中文档名亦收);状态落 /run/perfmode.state。

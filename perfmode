@@ -10,13 +10,15 @@
 #   sudo perfmode                # 显示现态(EC cTGP + GPU 功率墙 + PL1/PL2 + EPP)
 #   sudo perfmode battery-saver  # 省电:GPU 80W + PL1 28W/PL2 45W + EPP power
 #   sudo perfmode balanced       # 平衡:GPU 100W + PL1 45W/PL2 65W + EPP balance_performance(出厂默认)
-#   sudo perfmode performance    # 性能:GPU 125W + PL1 50W/PL2 65W + EPP performance
+#   sudo perfmode performance    # 性能:GPU 125W 硬顶(DB 关) + PL1 30W/PL2 45W + EPP performance
+# 2026-10-07 压测断电教训:GPU 145W(DB)+CPU PL1 50W 合计超适配器(约 180W 砖)致 EC 硬切
+# (断前 CPU 仅 85C/GPU 50C,零 OS 告警,验尸为电源过载);性能档重校进安全圈,双满禁用
 import os, re, subprocess, sys, time
 
 PRESETS = {
     "battery-saver":  dict(gpu_off=0,  pl1=28_000_000, pl2=45_000_000, epp="balance_power", db=0),
     "balanced":       dict(gpu_off=20, pl1=45_000_000, pl2=65_000_000, epp="balance_performance", db=25),
-    "performance":    dict(gpu_off=45, pl1=50_000_000, pl2=65_000_000, epp="performance", db=25),
+    "performance":    dict(gpu_off=45, pl1=30_000_000, pl2=45_000_000, epp="performance", db=0),
 }
 ALIASES = {"save": "battery-saver", "bal": "balanced", "perf": "performance",
            "省电": "battery-saver", "平衡": "balanced", "性能": "performance"}
