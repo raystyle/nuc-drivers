@@ -1,5 +1,5 @@
 #!/bin/bash
-# fanctl-omc v2.2: NUC X15 (LAPKC71F) auto thermal fan controller (NUCtool 定位)
+# fanctl-omc v2.3: NUC X15 (LAPKC71F) auto thermal fan controller (NUCtool 定位)
 # CPU 扇(fan1)恒 EC 自治;本服务控 GPU/Secondary 扇(fan2),EC 0x60 脉冲写入
 # 曲线按 CPU 与 GPU 温度较高者驱动;阈值与目标可环境变量覆盖
 # 状态文件 /run/fanctl-omc.state 供 fantool 顶栏扩展消费
@@ -26,9 +26,21 @@ cpu_t() { local d t m=0 v
     done
   done
   echo $((m/1000)); }
-gpu_t() { local g
-  g=$(nvidia-smi --query-gpu=temperature.gpu --format=csv,noheader 2>/dev/null | head -1 | tr -dc '0-9')
-  echo "${g:-0}"; }
+smi_query() {  # 一次双查:温度 + 功率
+  nvidia-smi --query-gpu=temperature.gpu,power.draw --format=csv,noheader,nounits 2>/dev/null | head -1; }
+SMI=$(smi_query)
+gpu_t() { local g=${SMI%%,*}; g=$(echo "$g" | tr -dc '0-9'); echo "${g:-0}"; }
+gpu_w() { local w=${SMI##*,}; w=$(echo "$w" | tr -dc '0-9.'); echo "${w%.*}"; }
+RAPL_E=$(ls /sys/class/powercap/intel-rapl*/energy_uj 2>/dev/null | head -1)
+cpu_w_prev=$(cat "$RAPL_E" 2>/dev/null || echo 0)
+t_prev=$EPOCHREALTIME
+cpu_w() { local e now d
+  e=$(cat "$RAPL_E" 2>/dev/null || echo 0); now=$EPOCHREALTIME
+  d=$(awk -v a="$t_prev" -v b="$now" 'BEGIN{print b-a}')
+  [ -z "$RAPL_E" ] && { echo 0; return; }
+  awk -v e1="$cpu_w_prev" -v e2="$e" -v dt="$d" 'BEGIN{
+    d=e2-e1; if (d<0) d+=262143999999; printf "%d", (dt>0)? d/1000000/dt : 0}'
+  cpu_w_prev=$e; t_prev=$now; }
 T1=${T1:-60}; T2=${T2:-70}; T3=${T3:-80}
 R0=${R0:-0}; R1=${R1:-2500}; R2=${R2:-3500}; R3=${R3:-5000}
 HYST=${HYST:-3}
@@ -44,7 +56,8 @@ while :; do
   if [ "$tgt" -ne "$cur" ]; then cur=$tgt; echo "$(date '+%F %T') T=${t}C(cpu=$c gpu=$g) fan2-target=$cur"; fi
   r=$(rpm 108); r=${r:-0}
   f1=$(rpm 100); f1=${f1:-0}
-  printf "cpu=%s gpu=%s fan1=%s fan2=%s target=%s %s\n" "$c" "$g" "$f1" "$r" "$cur" "$(date '+%F %T')" > /run/fanctl-omc.state
+  cw=$(cpu_w); gw=$(gpu_w); SMI=$(smi_query)
+  printf "cpu=%s gpu=%s fan1=%s fan2=%s target=%s cpuW=%s gpuW=%s %s\n" "$c" "$g" "$f1" "$r" "$cur" "$cw" "$gw" "$(date '+%F %T')" > /run/fanctl-omc.state
   if [ "$cur" -gt 0 ]; then
     if   [ "$r" -lt $((cur-100)) ]; then for i in 1 2 3 4 5; do w60 10; sleep 0.7; done
     elif [ "$r" -gt $((cur+100)) ]; then w60 07; sleep 5
