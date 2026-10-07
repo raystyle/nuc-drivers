@@ -1,5 +1,5 @@
 #!/bin/bash
-# ecguard v2.0: NUC X15 (LAPKC71F) 断电护栏守护 — 三层
+# ecguard v2.1: NUC X15 (LAPKC71F) 断电护栏守护 — 三层
 #   1. 充电涌流守卫:EC 充电档案 STATIONARY(0x07A6 bits4-5,可逆;v1 实战:纯 GPU
 #      满载释放三轮五发 -60~74W 跌落零断电,但合成腿证明其非充分,故升 v2)
 #   2. 总功率总督:CPU 占用 × PL + GPU power.draw 估总 draw,超预算压 GPU cTGP
@@ -11,10 +11,10 @@
 set -u
 OEM4=0x07A6
 CTGP_OFF=0x0744
-LOG=/run/ecguard.state
+LOG=/var/log/ecguard.log
 GSTATE=/run/ecguard.gpu
 BALANCED=0x10; STATIONARY=0x20
-BUDGET=${ECGUARD_BUDGET:-165}
+BUDGET=${ECGUARD_BUDGET:-140}
 BASE=25            # 系统本体估耗(屏/内存/外设)
 HYST=15            # 放行滞回
 
@@ -125,15 +125,21 @@ arm)
       cpu_est=$(( pl * u / 100 ))
       total=$(( w + cpu_est + BASE ))
       want=$(preset_gpu_off)
-      if [ "$total" -gt "$BUDGET" ]; then
-        # 压 10W 一档,下限 0
+      if [ "$total" -gt $(( BUDGET + 20 )) ] || { [ "$u" -gt 65 ] && [ "$w" -gt 50 ]; }; then
+        # v2.1 预判钳压:合成形态(cpu 忙 + GPU 起势)或超预算 20W -> 一步到地板(赛跑必须赢在 t=0)
+        if [ "$cur_off" -gt 0 ]; then
+          ec_rw "$CTGP_OFF" 0 >/dev/null
+          echo "$(date '+%F %T') FLOOR-CLAMP total=${total}W cpu${u}% gpu${w}W cTGP ${cur_off}->0" >> "$LOG"
+          cur_off=0
+        fi
+      elif [ "$total" -gt "$BUDGET" ]; then
         new_off=$(( cur_off - 10 )); [ "$new_off" -lt 0 ] && new_off=0
         if [ "$new_off" -lt "$cur_off" ]; then
           ec_rw "$CTGP_OFF" "$new_off" >/dev/null
           echo "$(date '+%F %T') clamp total=${total}W(cpu${cpu_est}+gpu${w}+base${BASE}) cTGP ${cur_off}->${new_off}" >> "$LOG"
           cur_off=$new_off
         fi
-      elif [ "$total" -lt $(( BUDGET - HYST )) ] && [ "$cur_off" -lt "$want" ]; then
+      elif [ "$total" -lt $(( BUDGET - HYST )) ] && [ "$cur_off" -lt "$want" ] && ! { [ "$u" -gt 60 ] && [ "$w" -gt 40 ]; }; then
         new_off=$(( cur_off + 10 )); [ "$new_off" -gt "$want" ] && new_off=$want
         ec_rw "$CTGP_OFF" "$new_off" >/dev/null
         echo "$(date '+%F %T') release total=${total}W cTGP ${cur_off}->${new_off}" >> "$LOG"
@@ -141,7 +147,7 @@ arm)
       fi
       printf "gpuW=%s cpu%%=%s est=%sW ctgp_off=%s %s\n" "$w" "$u" "$total" "$cur_off" "$(date '+%F %T')" > "$GSTATE"
     fi
-    sleep 2
+    sleep 1
   done
   ;;
 *)

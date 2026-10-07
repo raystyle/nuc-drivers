@@ -6,13 +6,23 @@
 #   feature 0x08: 08 02 33 00 <bright 0-0x32> 00 00 00   (mode USER + 全局亮度)
 #   每行 0..5: feature 0x16: 16 00 <row> 00*5            (行宣告)
 #              output 62B:  00 00 [B*20][G*20][R*20]     (行色板)
-# 用法(需 root,/dev/hidraw0):
+# 用法(需 root,ITE hidraw 动态解析):
 #   sudo kbdlight                # 显示状态(读 /run/kbdlight.state)
 #   sudo kbdlight 50             # 亮度 0-100(%)
 #   sudo kbdlight 80 FF8800      # 亮度 + 颜色 RRGGBB(可选,默认白)
 import fcntl, os, sys, time
 
-HIDRAW = "/dev/hidraw0"
+def find_ite():
+    """动态解析 ITE 8291 的 hidraw(枚举序会翻,2026-10-07 五断后 hidraw0->1 实证)。"""
+    import os as _os
+    for d in sorted(_os.listdir("/sys/class/hidraw")):
+        try:
+            u = open(f"/sys/class/hidraw/{d}/device/uevent").read().upper()
+        except OSError:
+            continue
+        if "ITE" in u or "048D:6006" in u:
+            return f"/dev/{d}"
+    die("未找到 ITE 8291 hidraw 设备(USB 枚举失败?)")
 STATE = "/run/kbdlight.state"
 HIDIOCSFEATURE = 0xC0064806  # _IOWR('H', 0x06, 8)
 ROWS = 6
@@ -25,7 +35,7 @@ def die(msg, code=1):
 
 
 def send(bright, r, g, b):
-    fd = os.open(HIDRAW, os.O_RDWR)
+    fd = os.open(find_ite(), os.O_RDWR)
     try:
         fcntl.ioctl(fd, HIDIOCSFEATURE, bytes([0x08, 0x02, 0x33, 0x00, bright, 0, 0, 0]))
         for row in range(ROWS):
