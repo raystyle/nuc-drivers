@@ -14,16 +14,20 @@ Intel NUC X15(Uniwill 准系统,LAPKC71F / LAPKC71E / 麦本本 X568 等同板�
   - (v2.1 及以前:主线 `uniwill_laptop` hwmon 直读,升级键盘背光栈后不可用)
 - EC 用户态通道:`acpi_ec` 树外模块暴露 `/dev/ec`(扁平映像,`dd` 偏移读写)
 
-## 键盘背光(v2.2)
+## 键盘背光(v2.3,ITE 8291 HID 直驱)
 
-内核自带 `uniwill_laptop` 抢占 Uniwill WMI 设备,致 tuxedo 栈无法 probe,键盘背光无人驱动。
-处置 = blacklist 主线 + tuxedo 全权接管(本机型 barebone ID 0x08 不在 tuxedo 已知列表,
-实测两级定色白光,须 `uw_force_kbd_type=1` 强制):
 
-- `conf/modprobe-tuxedo-uniwill.conf` → `/etc/modprobe.d/tuxedo-uniwill.conf`(blacklist 双模块 + 强制 type)
-- `conf/modules-load-tuxedo-drivers.conf` → `/etc/modules-load.d/tuxedo-drivers.conf`(开机拉 uniwill_wmi)
-- 控制面 = `/sys/devices/platform/tuxedo_keyboard/leds/white:kbd_backlight`(0/1/2,sysfs 钳制)
-- 旋钮:`sudo kbdlight`(查档)| `kbdlight 2`(设档)| `kbdlight +1`(相对调)
+真相(2026-10-07 实证):**这块板的键盘灯不归 EC 管**。uniwill EC 的 0x078c/0x1802 寄存器
+写入全被接受但物理无效(差分实验零字节联动);灯控在 **ITE 8291 USB HID 芯片(048d:6006,
+/dev/hidraw0)**。tuxedo ite_8291 驱动别名表只有 6004/600A/600B 不含 6006,故从不绑定;
+上游(Wer-Wolf#17、Armin Wolf 补丁)同证:EC 的 kbd LED 不驱动灯,bit0 探测位已被标 unreliable。
+
+- 协议(tuxedo-drivers ite8291_write_rows 提炼):feature `08 02 33 00 <亮 0-0x32>...` 设模式
+  与全局亮度;每行 feature `16 00 <行>...` 宣告 + 62 字节 output `[00 00][B*20][G*20][R*20]`,共 6 行
+- 旋钮(需 root,/dev/hidraw0):`sudo kbdlight`(查态)| `sudo kbdlight 50`(亮度 0-100%)|
+  `sudo kbdlight 80 FFA500`(亮度 + 颜色 RRGGBB);状态落 /run/kbdlight.state(芯片现值不可读)
+- 附带栈(触控板/飞行模式等 uniwill_wmi 面仍需要):`conf/modprobe-tuxedo-uniwill.conf` 保留
+  blacklist 主线 uniwill_laptop + uw_force_kbd_type=1;EC 背光寄存器路径仅历史参考
 
 ## 温控曲线(默认,可覆盖)
 

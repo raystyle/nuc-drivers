@@ -1,5 +1,5 @@
 #!/bin/bash
-# nuc-fantool installer v2.2: acpi_ec + fanctl-omc 服务 + 键盘背光栈 + kbdlight(Ubuntu 26.04 / kernel 7.0 实测)
+# nuc-fantool installer v2.3: acpi_ec + fanctl-omc 服务 + tuxedo 栈 + kbdlight ITE8291 直驱(Ubuntu 26.04 / kernel 7.0 实测)
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -37,7 +37,7 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now fanctl-omc
 
 echo "== kbdlight 键盘背光旋钮"
-sudo install -m 755 kbdlight.sh /usr/local/bin/kbdlight
+sudo install -m 755 kbdlight /usr/local/bin/kbdlight
 
 echo "== gnome shell extension(注销重登一次后生效)"
 EXTDIR="$HOME/.local/share/gnome-shell/extensions/fantool@nuc-fantool"

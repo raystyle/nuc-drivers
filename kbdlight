@@ -1,0 +1,77 @@
+#!/usr/bin/env python3
+# kbdlight v2.3: NUC X15 (LAPKC71F) 键盘背光旋钮 — ITE 8291 HID 直驱版
+# 真相(2026-10-07):该板键盘灯不归 EC 管(uniwill EC 0x078c/0x180x 写入全被接受但物理无效),
+# 灯控在 ITE 8291 USB HID 芯片(048d:6006);tuxedo ite_8291 驱动别名表只有 6004/600A/600B
+# 不含 6006,故从不绑定。本工具用户态复刻 ite8291_write_rows 协议(tuxedo-drivers 源码提炼):
+#   feature 0x08: 08 02 33 00 <bright 0-0x32> 00 00 00   (mode USER + 全局亮度)
+#   每行 0..5: feature 0x16: 16 00 <row> 00*5            (行宣告)
+#              output 62B:  00 00 [B*20][G*20][R*20]     (行色板)
+# 用法(需 root,/dev/hidraw0):
+#   sudo kbdlight                # 显示状态(读 /run/kbdlight.state)
+#   sudo kbdlight 50             # 亮度 0-100(%)
+#   sudo kbdlight 80 FF8800      # 亮度 + 颜色 RRGGBB(可选,默认白)
+import fcntl, os, sys, time
+
+HIDRAW = "/dev/hidraw0"
+STATE = "/run/kbdlight.state"
+HIDIOCSFEATURE = 0xC0064806  # _IOWR('H', 0x06, 8)
+ROWS = 6
+SCALE = 50  # 芲通道与全局亮度的芯片上限 0x32
+
+
+def die(msg, code=1):
+    sys.stderr.write(f"kbdlight: {msg}\n")
+    sys.exit(code)
+
+
+def send(bright, r, g, b):
+    fd = os.open(HIDRAW, os.O_RDWR)
+    try:
+        fcntl.ioctl(fd, HIDIOCSFEATURE, bytes([0x08, 0x02, 0x33, 0x00, bright, 0, 0, 0]))
+        for row in range(ROWS):
+            fcntl.ioctl(fd, HIDIOCSFEATURE, bytes([0x16, 0x00, row, 0, 0, 0, 0, 0]))
+            data = bytearray(62)
+            data[2:22] = bytes([b] * 20)
+            data[22:42] = bytes([g] * 20)
+            data[42:62] = bytes([r] * 20)
+            os.write(fd, data)
+            time.sleep(0.01)
+    finally:
+        os.close(fd)
+    with open(STATE, "w") as f:
+        f.write(f"brightness={bright} color={r:02x}{g:02x}{b:02x} {time.strftime('%F %T')}\n")
+
+
+def main():
+    args = sys.argv[1:]
+    if not args:
+        try:
+            print(open(STATE).read().strip())
+        except FileNotFoundError:
+            print("state: unset(重启后未设;芯片现值不可读)")
+        return
+    pct = args[0]
+    if pct in ("-h", "--help"):
+        print(__doc__)
+        return
+    try:
+        pct = int(pct)
+    except ValueError:
+        die(f"非法亮度 {args[0]}(0-100 整数)")
+    if not 0 <= pct <= 100:
+        die(f"亮度越界 {pct}(0-100)")
+    bright = pct * SCALE // 100
+    color = args[1] if len(args) > 1 else "FFFFFF"
+    try:
+        color = bytes.fromhex(color)
+        if len(color) != 3:
+            raise ValueError
+    except ValueError:
+        die(f"非法颜色 {color}(RRGGBB 十六进制)")
+    r, g, b = (c * SCALE // 255 for c in color)
+    send(bright, r, g, b)
+    print(f"set: brightness={pct}% (chip {bright}/{SCALE}) color={color.hex().upper()}")
+
+
+if __name__ == "__main__":
+    main()
