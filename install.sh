@@ -36,8 +36,11 @@ sudo install -m 644 fanctl-omc.service /etc/systemd/system/fanctl-omc.service
 sudo systemctl daemon-reload
 sudo systemctl enable --now fanctl-omc
 
-echo "== kbdlight 键盘背光旋钮"
+echo "== kbdlight 键盘背光旋钮 + 开机默认白光"
 sudo install -m 755 kbdlight /usr/local/bin/kbdlight
+sudo install -m 644 kbdlight-default.service /etc/systemd/system/kbdlight-default.service
+sudo systemctl daemon-reload
+sudo systemctl enable kbdlight-default >/dev/null 2>&1 || true
 
 echo "== gnome shell extension(注销重登一次后生效)"
 EXTDIR="$HOME/.local/share/gnome-shell/extensions/fantool@nuc-fantool"

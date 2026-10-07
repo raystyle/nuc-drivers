@@ -1,0 +1,12 @@
+[Unit]
+Description=NUC X15 keyboard backlight default (white 50% via ITE 8291)
+After=multi-user.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# hidraw0 由 USB 枚举产出,开机早期可能未就绪;15x2s 重试窗(与 fanctl 等 /dev/ec 同形)
+ExecStart=/bin/sh -c 'i=0; while [ $i -lt 15 ]; do /usr/local/bin/kbdlight 50 FFFFFF && exit 0; sleep 2; i=$((i+1)); done; exit 1'
+
+[Install]
+WantedBy=multi-user.target

@@ -28,6 +28,8 @@ Intel NUC X15(Uniwill 准系统,LAPKC71F / LAPKC71E / 麦本本 X568 等同板�
   `sudo kbdlight 80 FFA500`(亮度 + 颜色 RRGGBB);状态落 /run/kbdlight.state(芯片现值不可读)
 - 附带栈(触控板/飞行模式等 uniwill_wmi 面仍需要):`conf/modprobe-tuxedo-uniwill.conf` 保留
   blacklist 主线 uniwill_laptop + uw_force_kbd_type=1;EC 背光寄存器路径仅历史参考
+- 开机默认白光:`kbdlight-default.service`(oneshot,白 50%,hidraw 15x2s 就绪重试窗);
+  改默认亮度/颜色用 `sudo systemctl edit kbdlight-default` 覆写 ExecStart 后 `systemctl restart` 生效
 
 ## 温控曲线(默认,可覆盖)
 
