@@ -31,16 +31,25 @@ echo "   (blacklist 下次启动生效;当前会话如主线 uniwill_laptop 在�
 echo "     sudo modprobe -r uniwill_laptop tuxedo_nb02_nvidia_power_ctrl 2>/dev/null; sudo modprobe tuxedo_keyboard)"
 
 echo "== fanctl service"
-sudo install -m 755 fanctl-omc.sh /usr/local/bin/fanctl-omc.sh
-sudo install -m 644 fanctl-omc.service /etc/systemd/system/fanctl-omc.service
+sudo install -m 755 fanctl.sh /usr/local/bin/fanctl.sh
+sudo install -m 644 fanctl.service /etc/systemd/system/fanctl.service
 sudo systemctl daemon-reload
-sudo systemctl enable --now fanctl-omc
+sudo systemctl enable --now fanctl
+# v2.4 迁移:退役旧 fanctl-omc 单元
+sudo systemctl disable --now fanctl-omc >/dev/null 2>&1 || true
+sudo rm -f /etc/systemd/system/fanctl-omc.service /usr/local/bin/fanctl-omc.sh
 
 echo "== kbdlight 键盘背光旋钮 + 开机默认白光"
 sudo install -m 755 kbdlight /usr/local/bin/kbdlight
 sudo install -m 644 kbdlight-default.service /etc/systemd/system/kbdlight-default.service
 sudo systemctl daemon-reload
 sudo systemctl enable kbdlight-default >/dev/null 2>&1 || true
+
+echo "== ecguard 断电护栏(充电 stationary + GPU 跌落观测)"
+sudo install -m 755 ecguard.sh /usr/local/bin/ecguard.sh
+sudo install -m 644 ecguard.service /etc/systemd/system/ecguard.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now ecguard
 
 echo "== perfmode 性能三档旋钮"
 sudo install -m 755 perfmode /usr/local/bin/perfmode

@@ -1,4 +1,4 @@
-# nuc-fantool
+# nuc-fantool(工具族:fanctl 遥测 + ecguard 护栏 + kbdlight + perfmode)
 
 Intel NUC X15(Uniwill 准系统,LAPKC71F / LAPKC71E / 麦本本 X568 等同板机型)Linux 自动温控风扇服务。
 
@@ -50,22 +50,22 @@ cd nuc-fantool
 sudo sh install.sh
 ```
 
-install.sh 做:编译装 `acpi_ec` 模块并配开机自动加载;装键盘背光双 conf(blacklist 主线 uniwill + 强制 tuxedo type);装 `fanctl-omc.sh` 与 systemd 服务 `fanctl-omc` 并 `enable --now`;装 `kbdlight` 背光旋钮。
+install.sh 做:编译装 `acpi_ec` 模块并配开机自动加载;装键盘背光双 conf(blacklist 主线 uniwill + 强制 tuxedo type);装 `fanctl.sh` 与 systemd 服务 `fanctl` 并 `enable --now`;装 `kbdlight` 背光旋钮。
 
 ## 用法与状态
 
 ```bash
-systemctl status fanctl-omc                          # 服务态
-sudo journalctl -u fanctl-omc -f                     # 温度与目标切换日志
+systemctl status fanctl                          # 服务态
+sudo journalctl -u fanctl -f                     # 温度与目标切换日志
 ```
 
 改曲线(示例:65 度起、顶档 4500):
 
 ```bash
-sudo systemctl edit fanctl-omc
+sudo systemctl edit fanctl
 # [Service]
 # Environment=T1=65 R1=2600 R3=4500
-sudo systemctl restart fanctl-omc
+sudo systemctl restart fanctl
 ```
 
 状态栏 UI(内置扩展):顶栏右侧常显「最高温°C fan1·fan2→目标」(如 `48°C 1350·0→0`),数据源为本服务状态文件加 uniwill hwmon,两秒刷新。装后**注销重登一次**激活(Wayland 下 Shell 不热载新扩展):
@@ -115,10 +115,27 @@ EC 0x0751 档位寄存器写入被吞、tuxedo_io ioctl 空转、DPTF/platform_p
 (别名 perf/bal/save 与中文档名亦收);状态落 /run/perfmode.state。
 两颗模式灯维持无接口(灯为 cosmetic,硬件实效以功率墙为准)。
 
+## 断电护栏(ecguard,2026-10-07 三案验尸后立)
+
+三案硬断电签名:GPU 满载(120W+)释放后 15-25 秒 EC 硬切(零 OS 痕迹、核温不高、
+230W 原配砖、风扇正常)。已排除:EC 写入对撞(第三次断电时写手全停)、适配器过载、
+热跳闸;头号嫌疑 = 负载跌落电流灌电池(与电池常态 Not charging 异常吻合)。
+BIOS .0049/.0050/.0051 changelog 无对症修复,不升级(用户裁定,亦避硬切机上刷写风险)。
+
+护栏架构(纯软件,用户裁定不拔电池不刷固件):
+
+- **ecguard**:EC 充电档案切 STATIONARY(0x07A6 bits4-5,软件版"拔电池",完全可逆)
+  + GPU 功率跌落观测记录(跌落照记,若不再断电即坐实充电通路说)
+  - `sudo ecguard status` 看态 | `sudo ecguard release` 恢复充电(出行前用)
+- **fanctl v2.4 断代**:零 EC 写纯遥测(EC 自治已证足够压温:CPU-only 稳、GPU 124W
+  满载 2 分钟 72/91C 双扇齐转),0x60 写手全部移除,状态文件照供顶栏
+- 状态文件路径 /run/fanctl-omc.state 保持不变(顶栏扩展兼容)
+- 判别实验(择机):GPU 归零后 CPU 保持高功率 / 降功率上限再卸载,分离残余假说
+
 ## 风险与回滚
 
 - EC 直写有硬件风险,仅适配上述 Uniwill 准系统机型;`0x60` 只影响 fan2
 - 服务停止或重启后,EC 回收脉冲,fan2 回落自治(fan1 全程不受影响)
-- 完全卸载:`sudo systemctl disable --now fanctl-omc && sudo rm /usr/local/bin/fanctl-omc.sh /etc/systemd/system/fanctl-omc.service /usr/local/bin/kbdlight /etc/modprobe.d/tuxedo-uniwill.conf /etc/modules-load.d/tuxedo-drivers.conf && sudo modprobe -r acpi_ec && sudo rm /lib/modules/$(uname -r)/extra/acpi_ec.ko /etc/modules-load.d/acpi_ec.conf`
-- 恢复主线 `uniwill_laptop`(弃键盘背光换回 hwmon 直读):删 `/etc/modprobe.d/tuxedo-uniwill.conf` 后重启,并把 fanctl-omc.sh 回退 v2.1
+- 完全卸载:`sudo systemctl disable --now fanctl && sudo rm /usr/local/bin/fanctl.sh /etc/systemd/system/fanctl.service /usr/local/bin/kbdlight /etc/modprobe.d/tuxedo-uniwill.conf /etc/modules-load.d/tuxedo-drivers.conf && sudo modprobe -r acpi_ec && sudo rm /lib/modules/$(uname -r)/extra/acpi_ec.ko /etc/modules-load.d/acpi_ec.conf`
+- 恢复主线 `uniwill_laptop`(弃键盘背光换回 hwmon 直读):删 `/etc/modprobe.d/tuxedo-uniwill.conf` 后重启,并把 fanctl.sh 回退 v2.1
 - 内核升级后需重跑 install.sh 重编 acpi_ec

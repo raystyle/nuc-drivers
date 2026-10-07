@@ -1,0 +1,16 @@
+[Unit]
+Description=NUC X15 power-cut guard (charging stationary + GPU drop log)
+After=multi-user.target
+# /dev/ec 由 acpi_ec 提供;nvidia-smi 冷启动就绪窗内重试
+StartLimitIntervalSec=120
+StartLimitBurst=5
+
+[Service]
+Type=simple
+ExecStartPre=/bin/sh -c 'i=0; while [ ! -e /dev/ec ] && [ $i -lt 15 ]; do sleep 2; i=$((i+1)); done; [ -e /dev/ec ]'
+ExecStart=/usr/local/bin/ecguard.sh arm
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
