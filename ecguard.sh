@@ -23,6 +23,9 @@ ec_rw() {  # $1=addr16hex $2=值(hex/dec) 或空=读;stdout=读回值
 import os, sys, time
 addr = int(sys.argv[1], 16)
 data = int(sys.argv[2], 0) if len(sys.argv) > 2 and sys.argv[2] != "" else None
+import fcntl
+_lk = open("/run/ecmail.lock", "w")
+fcntl.flock(_lk, fcntl.LOCK_EX)  # 邮箱跨进程串行
 fd = os.open("/dev/ec", os.O_RDWR)
 def rd(o):
     os.lseek(fd, o, 0); return os.read(fd, 1)[0]
@@ -39,6 +42,7 @@ for _ in range(30):
     time.sleep(0.015)
     if rd(0x8C) & 0x80: break
 lo = rd(0x8D); wr(0x8C, 0)
+fcntl.flock(_lk, fcntl.LOCK_UN)
 print(lo)
 PY
 }
@@ -47,6 +51,9 @@ ec_write_bits() {  # $1=addr $2=byte
   sudo -n python3 - "$1" "$2" <<'PY' 2>/dev/null
 import os, sys, time
 addr, byte = int(sys.argv[1], 16), int(sys.argv[2], 0)
+import fcntl
+_lk = open("/run/ecmail.lock", "w")
+fcntl.flock(_lk, fcntl.LOCK_EX)  # 邮箱跨进程串行
 fd = os.open("/dev/ec", os.O_RDWR)
 def rd(o):
     os.lseek(fd, o, 0); return os.read(fd, 1)[0]
@@ -64,7 +71,9 @@ def mb(data=None):
     lo = rd(0x8D); wr(0x8C, 0)
     return lo
 mb(byte)
-print(mb())
+r = mb()
+fcntl.flock(_lk, fcntl.LOCK_UN)
+print(r)
 PY
 }
 
@@ -84,7 +93,7 @@ cpu_util() {
 
 preset_gpu_off() {  # perfmode 预设 -> 期望 cTGP 偏移(用户意图上限)
   case "$(cat /run/perfmode.state 2>/dev/null | awk '{print $1}')" in
-    performance) echo 45;; balanced) echo 20;; battery-saver) echo 0;; *) echo 20;;
+    performance-max) echo 45;; performance) echo 25;; balanced) echo 10;; battery-saver) echo 0;; *) echo 10;;
   esac
 }
 

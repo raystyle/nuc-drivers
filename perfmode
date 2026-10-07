@@ -8,20 +8,22 @@
 # 注:性能键两颗灯无 Linux 接口(键停 atkbd e078,固件不自治;详见仓 README 性能档节),本工具管硬件实效不管灯。
 # 用法(需 root):
 #   sudo perfmode                # 显示现态(EC cTGP + GPU 功率墙 + PL1/PL2 + EPP)
-#   sudo perfmode battery-saver  # 省电:GPU 80W + PL1 28W/PL2 45W + EPP power
-#   sudo perfmode balanced       # 平衡:GPU 100W + PL1 45W/PL2 65W + EPP balance_performance(出厂默认)
-#   sudo perfmode performance    # 性能:GPU 125W 硬顶(DB 关) + PL1 30W/PL2 35W(v2.1 削峰) + EPP performance
-# 2026-10-07 压测断电教训:GPU 145W(DB)+CPU PL1 50W 合计超适配器(约 180W 砖)致 EC 硬切
-# (断前 CPU 仅 85C/GPU 50C,零 OS 告警,验尸为电源过载);性能档重校进安全圈,双满禁用
-import os, re, subprocess, sys, time
+#   sudo perfmode battery-saver  # 省电:GPU 80W 硬 + PL1 28/PL2 45 -> 合成最坏 150W
+#   sudo perfmode balanced       # 平衡:GPU 90W 硬 + PL1 30/PL2 40 -> 合成最坏 155W
+#   sudo perfmode performance    # 性能:GPU 105W 硬 + PL1 30/PL2 35 -> 合成最坏 165W(任意组合安全形态)
+#   sudo perfmode performance-max# 极限:GPU 125W 硬 + PL1 30/PL2 35 -> 合成最坏 185W,禁双满(仅单侧负载用)
+# 形态裁定(2026-10-07 六案后):双侧硬件强制帽(cTGP 固件帽 + RAPL PL 芯片帽)使合成
+# 最坏瞬态天生在墙(~190W)下,免竞速;六案验尸链与运营信封见 README
+import fcntl, os, re, subprocess, sys, time
 
 PRESETS = {
-    "battery-saver":  dict(gpu_off=0,  pl1=28_000_000, pl2=45_000_000, epp="balance_power", db=0),
-    "balanced":       dict(gpu_off=20, pl1=45_000_000, pl2=65_000_000, epp="balance_performance", db=25),
-    "performance":    dict(gpu_off=45, pl1=30_000_000, pl2=35_000_000, epp="performance", db=0),
+    "battery-saver":     dict(gpu_off=0,  pl1=28_000_000, pl2=45_000_000, epp="balance_power", db=0),
+    "balanced":          dict(gpu_off=10, pl1=30_000_000, pl2=40_000_000, epp="balance_performance", db=0),
+    "performance":       dict(gpu_off=25, pl1=30_000_000, pl2=35_000_000, epp="performance", db=0),
+    "performance-max":   dict(gpu_off=45, pl1=30_000_000, pl2=35_000_000, epp="performance", db=0),
 }
-ALIASES = {"save": "battery-saver", "bal": "balanced", "perf": "performance",
-           "省电": "battery-saver", "平衡": "balanced", "性能": "performance"}
+ALIASES = {"save": "battery-saver", "bal": "balanced", "perf": "performance", "max": "performance-max",
+           "省电": "battery-saver", "平衡": "balanced", "性能": "performance", "极限": "performance-max"}
 STATE = "/run/perfmode.state"
 
 
@@ -47,6 +49,15 @@ def _wr(off, v):
     os.write(_ec(), bytes([v]))
 
 def mb(addr, data=None):
+    lock = open("/run/ecmail.lock", "w")
+    fcntl.flock(lock, fcntl.LOCK_EX)  # 邮箱跨进程串行(与 ecguard 竞态,2026-10-07 实证)
+    try:
+        return _mb(addr, data)
+    finally:
+        fcntl.flock(lock, fcntl.LOCK_UN)
+        lock.close()
+
+def _mb(addr, data=None):
     al, ah = addr & 0xff, (addr >> 8) & 0xff
     _wr(0x8C, _rd(0x8C) | 0x04)
     _wr(0x8A, al)

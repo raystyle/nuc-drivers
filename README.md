@@ -100,11 +100,16 @@ EC 0x0751 档位寄存器写入被吞、tuxedo_io ioctl 空转、DPTF/platform_p
   0x0744 偏移瓦数、0x0745 TPP、0x0746 DB 偏移;本机基线 80W,nvidia-smi 功率墙实时可验
 - CPU = powercap PL1/PL2 + intel_pstate EPP
 
-| 档位 | GPU 功率墙 | PL1/PL2 | EPP |
-| --- | --- | --- | --- |
-| battery-saver | 80W(DB 关,ctrl 0x05) | 28/45W | balance_power |
-| balanced | 100W + DB25(动态至 125) | 45/65W(出厂) | balance_performance |
-| performance | 125W 硬顶(DB 关) | 30/45W | performance |
+| 档位 | GPU 功率墙 | PL1/PL2 | 合成最坏 | EPP |
+| --- | --- | --- | --- | --- |
+| battery-saver | 80W 硬(DB 关) | 28/45W | 150W | balance_power |
+| balanced | 90W 硬(DB 关) | 30/40W | 155W | balance_performance |
+| performance | 105W 硬(DB 关) | 30/35W | 165W | performance |
+| performance-max | 125W 硬(DB 关) | 30/35W | 185W **禁双满** | performance |
+
+> 形态裁定(六案后):前三档为**任意组合安全形态**——双侧硬件强制帽(EC cTGP 固件帽 +
+> RAPL PL 芯片帽)使合成最坏瞬态天生在墙(~190W)之下,不依赖任何软件竞速;
+> performance-max 仅限单侧负载(纯 GPU 渲染/推理),双满合成炮永久禁入。
 
 > 2026-10-07 压测断电教训:GPU 145W(DB)+CPU PL1 50W 合计约 240W 超适配器(约 180W 砖)
 > 致 EC 硬切(断前 CPU 仅 85C/GPU 50C、零 OS 告警、journal 硬止,验尸为电源过载非热跳闸)。
