@@ -47,12 +47,16 @@ export default class FantoolStatusExtension extends Extension {
         this._label.set_style('margin: 0 10px; font-feature-settings: "tnum"; letter-spacing: 0.3px;');
         this._button.add_child(this._label);
 
-        this._menuLabel = new St.Label({ style: 'padding: 12px 16px; line-spacing: 6px;' });
-        this._menuLabel.clutter_text.use_markup = true;
-        const section = new PopupMenu.PopupMenuSection();
-        section.actor.add_actor(this._menuLabel);
-        this._button.menu.addMenuItem(section);
-        this._button.menu.connect('open-state-changed', (m, open) => { if (open) this._renderMenu(); });
+        this._menuLabel = new St.Label({ style: 'padding: 12px 16px;' });
+        try {
+            this._menuLabel.clutter_text.use_markup = true;
+            const section = new PopupMenu.PopupMenuSection();
+            section.actor.add_child(this._menuLabel);  // 新 Clutter 无 add_actor
+            this._button.menu.addMenuItem(section);
+            this._button.menu.connect('open-state-changed', (m, open) => { if (open) this._renderMenu(); });
+        } catch (e) {
+            log(`fantool: menu init failed: ${e}`);  // 菜单崩不拖面板
+        }
 
         Main.panel.addToStatusArea('nuc-fantool-status', this._button, 0, 'right');
         this._tick();
