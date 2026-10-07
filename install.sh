@@ -42,6 +42,9 @@ sudo install -m 644 kbdlight-default.service /etc/systemd/system/kbdlight-defaul
 sudo systemctl daemon-reload
 sudo systemctl enable kbdlight-default >/dev/null 2>&1 || true
 
+echo "== perfmode 性能三档旋钮"
+sudo install -m 755 perfmode /usr/local/bin/perfmode
+
 echo "== gnome shell extension(注销重登一次后生效)"
 EXTDIR="$HOME/.local/share/gnome-shell/extensions/fantool@nuc-fantool"
 mkdir -p "$EXTDIR"

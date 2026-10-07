@@ -88,6 +88,28 @@ sudo modprobe -r uniwill_laptop && sudo insmod uniwill-laptop.ko
 
 补丁内容:内核 7.0 清理适配(头文件迁移、LED 多色 API 移除后灯面 stub、WMI 事件成员移除);灯条控制因此牺牲,EC 主功能无恙。非常驻,重启自动回主线版。
 
+## 性能三档(perfmode v1.0)
+
+NUC X15 性能键三档(无灯省电/左灯平衡/两灯性能)在 Linux 无接口:键停 atkbd e078、
+EC 0x0751 档位寄存器写入被吞、tuxedo_io ioctl 空转、DPTF/platform_profile 缺位
+(2026-10-07 全实证;AMW0 WMI 族经研判为微软示例壳 + 无文档 OEM 体,SET 路径禁探)。
+
+解 = 硬件实效道,档位语义对齐 Intel NUC Software Studio Performance Tuning:
+
+- GPU TGP = Uniwill EC cTGP(Wer-Wolf 语义,同板 LAPKC71E 实证):0x0743 控制位、
+  0x0744 偏移瓦数、0x0745 TPP、0x0746 DB 偏移;本机基线 80W,nvidia-smi 功率墙实时可验
+- CPU = powercap PL1/PL2 + intel_pstate EPP
+
+| 档位 | GPU 功率墙 | PL1/PL2 | EPP |
+| --- | --- | --- | --- |
+| battery-saver | 80W(DB 关,ctrl 0x05) | 28/45W | balance_power |
+| balanced | 100W + DB25(动态至 125) | 45/65W(出厂) | balance_performance |
+| performance | 125W + DB25(顶 145) | 50/65W | performance |
+
+用法:`sudo perfmode`(看现态)| `sudo perfmode performance|balanced|battery-saver`
+(别名 perf/bal/save 与中文档名亦收);状态落 /run/perfmode.state。
+两颗模式灯维持无接口(灯为 cosmetic,硬件实效以功率墙为准)。
+
 ## 风险与回滚
 
 - EC 直写有硬件风险,仅适配上述 Uniwill 准系统机型;`0x60` 只影响 fan2

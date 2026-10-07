@@ -1,0 +1,150 @@
+#!/usr/bin/env python3
+# perfmode v1.0: NUC X15 (LAPKC71F) 性能三档 — GPU cTGP + CPU PL1/PL2 + EPP 组合预设
+# 语义对齐 Intel NUC Software Studio Performance Tuning(用户档位名),硬件通道:
+#   GPU TGP = Uniwill EC cTGP(Wer-Wolf 语义,同板 LAPKC71E 实证):
+#     0x0743 控制位(bit0 总使能|bit1 DB|bit2 CTGP),0x0744 偏移瓦数,0x0745 TPP(255),0x0746 DB(25)
+#     本机基线 80W,offset +20 实测 100W(nvidia-smi Current Power Limit 实证 2026-10-07)
+#   CPU = powercap PL1/PL2(intel-rapl)+ intel_pstate EPP
+# 注:性能键两颗灯无 Linux 接口(键停 atkbd e078,固件不自治;详见仓 README 性能档节),本工具管硬件实效不管灯。
+# 用法(需 root):
+#   sudo perfmode                # 显示现态(EC cTGP + GPU 功率墙 + PL1/PL2 + EPP)
+#   sudo perfmode battery-saver  # 省电:GPU 80W + PL1 28W/PL2 45W + EPP power
+#   sudo perfmode balanced       # 平衡:GPU 100W + PL1 45W/PL2 65W + EPP balance_performance(出厂默认)
+#   sudo perfmode performance    # 性能:GPU 125W + PL1 50W/PL2 65W + EPP performance
+import os, re, subprocess, sys, time
+
+PRESETS = {
+    "battery-saver":  dict(gpu_off=0,  pl1=28_000_000, pl2=45_000_000, epp="balance_power", db=0),
+    "balanced":       dict(gpu_off=20, pl1=45_000_000, pl2=65_000_000, epp="balance_performance", db=25),
+    "performance":    dict(gpu_off=45, pl1=50_000_000, pl2=65_000_000, epp="performance", db=25),
+}
+ALIASES = {"save": "battery-saver", "bal": "balanced", "perf": "performance",
+           "省电": "battery-saver", "平衡": "balanced", "性能": "performance"}
+STATE = "/run/perfmode.state"
+
+
+def die(msg, code=1):
+    sys.stderr.write(f"perfmode: {msg}\n")
+    sys.exit(code)
+
+
+# ---- Uniwill EC 邮箱(0x8A-0x8E,与 fanctl/kbdlight 同源协议)----
+_fd = None
+def _ec():
+    global _fd
+    if _fd is None:
+        _fd = os.open("/dev/ec", os.O_RDWR)
+    return _fd
+
+def _rd(off):
+    os.lseek(_ec(), off, 0)
+    return os.read(_ec(), 1)[0]
+
+def _wr(off, v):
+    os.lseek(_ec(), off, 0)
+    os.write(_ec(), bytes([v]))
+
+def mb(addr, data=None):
+    al, ah = addr & 0xff, (addr >> 8) & 0xff
+    _wr(0x8C, _rd(0x8C) | 0x04)
+    _wr(0x8A, al)
+    _wr(0x8B, ah)
+    if data is None:
+        _wr(0x8C, (_rd(0x8C) & 0x7F) | 0x01)
+    else:
+        _wr(0x8D, data & 0xFF)
+        _wr(0x8E, 0)
+        _wr(0x8C, (_rd(0x8C) & 0x7F) | 0x02)
+    ok = False
+    for _ in range(30):
+        time.sleep(0.015)
+        if _rd(0x8C) & 0x80:
+            ok = True
+            break
+    lo = _rd(0x8D)
+    _wr(0x8C, 0x00)
+    if not ok:
+        die(f"EC 邮箱超时 addr=0x{addr:04x}")
+    return lo
+
+
+def ctgp_init():
+    """按 Wer-Wolf uniwill_nvidia_ctgp_init 序列激活(幂等)。"""
+    mb(0x0744, 0)
+    mb(0x0745, 255)
+    mb(0x0746, 25)
+    mb(0x0743, 0x07)
+
+
+def gpu_watts():
+    out = subprocess.run(["nvidia-smi", "-q", "-d", "POWER"], capture_output=True, text=True).stdout
+    m = re.search(r"Current Power Limit\s*:\s*([\d.]+) W", out)
+    return f"{m.group(1)} W" if m else "?"
+
+
+def show():
+    off = mb(0x0744)
+    ctrl = mb(0x0743)
+    try:
+        pl1 = int(open("/sys/class/powercap/intel-rapl:0/constraint_0_power_limit_uw").read()) // 1_000_000
+        pl2 = int(open("/sys/class/powercap/intel-rapl:0/constraint_1_power_limit_uw").read()) // 1_000_000
+    except (OSError, ValueError):
+        pl1 = pl2 = -1
+    try:
+        epp = open("/sys/devices/system/cpu/cpu0/cpufreq/energy_performance_preference").read().strip()
+    except OSError:
+        epp = "?"
+    last = "(未设)"
+    try:
+        last = open(STATE).read().strip()
+    except FileNotFoundError:
+        pass
+    print(f"GPU 功率墙: {gpu_watts()}(cTGP ctrl=0x{ctrl:02x} offset={off},基线 80W)")
+    print(f"CPU PL1/PL2: {pl1}W / {pl2}W | EPP: {epp}")
+    print(f"上次预设: {last}")
+
+
+def apply(name):
+    p = PRESETS[name]
+    ctgp_init()
+    if not p["db"]:
+        mb(0x0746, 0)
+        mb(0x0743, 0x05)
+    mb(0x0744, p["gpu_off"])
+    for c, v in (("constraint_0_power_limit_uw", p["pl1"]), ("constraint_1_power_limit_uw", p["pl2"])):
+        try:
+            open(f"/sys/class/powercap/intel-rapl:0/{c}", "w").write(str(v))
+        except OSError as e:
+            print(f"perfmode: PL 写失败({c}):{e}", file=sys.stderr)
+    try:
+        cpus = [d for d in os.listdir("/sys/devices/system/cpu/") if re.fullmatch(r"cpu\d+", d)]
+        for c in cpus:
+            pth = f"/sys/devices/system/cpu/{c}/cpufreq/energy_performance_preference"
+            if os.path.exists(pth):
+                open(pth, "w").write(p["epp"])
+    except OSError as e:
+        print(f"perfmode: EPP 写失败:{e}", file=sys.stderr)
+    with open(STATE, "w") as f:
+        f.write(f"{name} {time.strftime('%F %T')}")
+    time.sleep(1.5)
+    print(f"perfmode: {name} 已应用 -> GPU {gpu_watts()}(DB {'关' if not p['db'] else '+' + str(p['db'])}) | PL1 {p['pl1']//1_000_000}W PL2 {p['pl2']//1_000_000}W | EPP {p['epp']}")
+
+
+def main():
+    if os.geteuid() != 0:
+        die("需要 root(EC /dev/ec 与 powercap sysfs)")
+    arg = sys.argv[1] if len(sys.argv) > 1 else ""
+    if not arg:
+        show()
+        return
+    if arg in ("-h", "--help"):
+        print(__doc__)
+        return
+    name = ALIASES.get(arg, arg)
+    if name not in PRESETS:
+        die(f"未知档位 {arg}({'/'.join(PRESETS)})")
+    apply(name)
+
+
+if __name__ == "__main__":
+    main()
